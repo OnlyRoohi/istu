@@ -18,11 +18,8 @@ logger = LOGGER(__name__)
 # --- CONFIG VALUES ---
 YT_API_KEY = "30DxNexGenBots0055e5"
 YTPROXY = "https://tgapi.xbitcode.com"
-
-# Aapki nayi ID
-PLAYLIST_ID = "@YouTubedatabasee"
-
-MONGO_DB_URI = "mongodb+srv://TEAM-KRITI:6MUrAhEdww12DaV6@cluster0.53piq9u.mongodb.net/?appName=Cluster0"
+PLAYLIST_ID = -1004493387604
+MONGO_DB_URI = "mongodb+srv://SizzuMusicBot:Istkhar786@sizzumusicbot.5rymou1.mongodb.net/?appName=SizzuMusicBot"
 LIMIT_SECONDS = 900
 DOWNLOAD_DIR = "downloads"
 
@@ -136,6 +133,7 @@ async def download_video(link: str) -> str:
             except: pass
         return None
 
+
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
@@ -156,39 +154,23 @@ class YouTubeAPI:
                     except: pass
         return None
 
-    # --- UNIVERSAL CACHING (Crash Proof) ---
+    # --- UNIVERSAL CACHING WITH TITLE SEARCH FIX ---
     async def _upload_to_cache(self, vid_id, file_path, title, is_video):
         try:
-            if not os.path.exists(file_path): 
-                print(f"DEBUG - ❌ Upload Cancelled: File not found -> {file_path}")
-                return
+            if not os.path.exists(file_path): return
             
             db_id = f"{vid_id}_video" if is_video else vid_id
             exists = await trackdb.find_one({"vid_id": db_id})
-            if exists: 
-                print("DEBUG - ⏩ Already in Database, skipping upload.")
-                return
+            if exists: return
 
-            print(f"DEBUG - 📤 Uploading to Channel ({PLAYLIST_ID}): {title}")
-            
-            bot_name = app.me.mention if (app and app.me) else "Bot"
-            cap = f"**Song:** {title}\n**ID:** `{vid_id}`\n**Saved by:** {bot_name}"
+            logger.info(f"📤 Uploading to Channel: {title}")
+            cap = f"**Song:** {title}\n**ID:** `{vid_id}`\n**Saved by:** {app.me.mention}"
             
             msg = None
-            try:
-                # Is block me upload hoga, fail hua to bot crash nahi hoga
-                if is_video:
-                    msg = await app.send_video(PLAYLIST_ID, file_path, caption=cap, supports_streaming=True)
-                else:
-                    msg = await app.send_audio(PLAYLIST_ID, file_path, caption=cap, title=title)
-            except ValueError as ve:
-                print(f"DEBUG - ⚠️ Peer ID Error: Bot ko channel id {PLAYLIST_ID} nahi mil rahi. ({ve})")
-                logger.error(f"Upload skipped due to Peer ID Error: {ve}")
-                return # Upload skip kar do
-            except Exception as e:
-                print(f"DEBUG - ⚠️ Upload failed: {e}")
-                logger.error(f"Telegram upload failed: {e}")
-                return
+            if is_video:
+                msg = await app.send_video(PLAYLIST_ID, file_path, caption=cap, supports_streaming=True)
+            else:
+                msg = await app.send_audio(PLAYLIST_ID, file_path, caption=cap, title=title)
 
             if msg:
                 await trackdb.update_one(
@@ -196,16 +178,14 @@ class YouTubeAPI:
                     {"$set": {
                         "message_id": msg.id, 
                         "title": title,
+                        "search_title": str(title).lower().strip(),
                         "type": "video" if is_video else "audio"
                     }},
                     upsert=True
                 )
-                print(f"DEBUG - ✅ Upload Complete (Msg ID: {msg.id}): {title}")
-                logger.info(f"Upload Complete (Msg ID: {msg.id}): {title}")
-
+                logger.info(f"✅ Upload Complete (Msg ID: {msg.id}): {title}")
         except Exception as e:
-            print(f"DEBUG - ❌ General Cache Error: {e}")
-            logger.error(f"Cache Error: {e}")
+            logger.error(f"Upload Error: {e}")
 
     async def get_cached_file(self, vid_id: str, is_video: bool = False):
         db_id = f"{vid_id}_video" if is_video else vid_id
@@ -214,10 +194,15 @@ class YouTubeAPI:
 
         doc = await trackdb.find_one({"vid_id": db_id})
         
+        # Fallback: Agar ID se nahi mila toh title/query ke through check karo database mein
+        if not doc:
+            doc = await trackdb.find_one({"search_title": {"$regex": str(vid_id).lower().strip()}})
+
         if doc and "message_id" in doc:
             message_id = doc['message_id']
+            resolved_vid = doc.get("vid_id", vid_id).replace("_video", "")
             ext = "mp4" if is_video else "mp3"
-            temp_path = os.path.join(DOWNLOAD_DIR, f"{vid_id}.{ext}")
+            temp_path = os.path.join(DOWNLOAD_DIR, f"{resolved_vid}.{ext}")
             
             try:
                 logger.info(f"🔄 Fetching from Channel (Msg ID: {message_id})")
@@ -246,7 +231,7 @@ class YouTubeAPI:
         
         return None
 
-    # --- GET RELATED (For Autoplay Fix) ---
+    # --- GET RELATED ---
     async def get_related(self, videoid: str, limit: int = 5) -> list:
         related_tracks = []
         try:
@@ -303,12 +288,12 @@ class YouTubeAPI:
 
         is_video_request = bool(video or songvideo)
 
-        # 1. CHECK DB CACHE (Fastest)
+        # 1. CHECK DB CACHE (Yeh song name ya ID dono se check karega agar API fail ho jaye)
         cached_path = await self.get_cached_file(vid_id, is_video=is_video_request)
         if cached_path: 
             return cached_path, True
 
-        # 2. DOWNLOAD USING NEW API
+        # 2. DOWNLOAD USING API (Shruti)
         if is_video_request:
             downloaded_file = await download_video(link)
         else:
@@ -316,10 +301,15 @@ class YouTubeAPI:
 
         # 3. IF DOWNLOAD SUCCESS, CACHE IT & RETURN
         if downloaded_file:
-            await self._upload_to_cache(vid_id, downloaded_file, title or vid_id, is_video_request)
+            asyncio.create_task(self._upload_to_cache(vid_id, downloaded_file, title or vid_id, is_video_request))
             return downloaded_file, True
         
-        logger.error("❌ All Download APIs Failed.")
+        # 4. FINAL FALLBACK: Agar API kaam nahi kar rahi, toh database mein title name match karke purana saved file uthane ki koshish karo
+        fallback_cache = await self.get_cached_file(title or vid_id, is_video=is_video_request)
+        if fallback_cache:
+            return fallback_cache, True
+
+        logger.error("❌ All Download APIs and Cache Failed.")
         return None, False
 
     # --- UTILS ---
@@ -457,4 +447,3 @@ class YouTubeAPI:
             return 0, "Video download failed"
         except Exception as e:
             return 0, f"Video download error: {e}"
-                
