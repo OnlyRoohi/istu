@@ -20,7 +20,7 @@ YT_API_KEY = "30DxNexGenBots0055e5"
 YTPROXY = "https://tgapi.xbitcode.com"
 
 # Aapki nayi ID
-PLAYLIST_ID = -1004493387604 
+PLAYLIST_ID = "@YouTubedatabasee"
 
 MONGO_DB_URI = "mongodb+srv://TEAM-KRITI:6MUrAhEdww12DaV6@cluster0.53piq9u.mongodb.net/?appName=Cluster0"
 LIMIT_SECONDS = 900
