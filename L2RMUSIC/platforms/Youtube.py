@@ -22,7 +22,7 @@ YTPROXY = "https://tgapi.xbitcode.com"
 # Aapki nayi ID
 PLAYLIST_ID = -1004493387604 
 
-MONGO_DB_URI = "mongodb+srv://L2RKING:BWF_MUSIC1@l2rking.1ikcd.mongodb.net/?retryWrites=true&w=majority"
+MONGO_DB_URI = "mongodb+srv://TEAM-KRITI:6MUrAhEdww12DaV6@cluster0.53piq9u.mongodb.net/?appName=Cluster0"
 LIMIT_SECONDS = 900
 DOWNLOAD_DIR = "downloads"
 
