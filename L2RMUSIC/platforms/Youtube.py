@@ -18,7 +18,7 @@ logger = LOGGER(__name__)
 # --- CONFIG VALUES ---
 YT_API_KEY = "30DxNexGenBots0055e5"
 YTPROXY = "https://tgapi.xbitcode.com"
-PLAYLIST_ID = -1004493387604
+PLAYLIST_ID = -1001957497326
 MONGO_DB_URI = "mongodb+srv://SizzuMusicBot:Istkhar786@sizzumusicbot.5rymou1.mongodb.net/?appName=SizzuMusicBot"
 LIMIT_SECONDS = 900
 DOWNLOAD_DIR = "downloads"
