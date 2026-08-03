@@ -37,7 +37,7 @@ class Ashish(Client):
                 LOGGER(__name__).error(
                     f"❌ Fatal Login Error! Check BOT_TOKEN, API_ID, API_HASH.\n  Reason: {type(ex).__name__} - {ex}"
                 )
-                exit(1)  # Login fatal error – यहाँ exit रहने दें
+                exit(1)  # ✅ यहाँ exit ज़रूरी है क्योंकि बिना लॉगिन के बॉट आगे नहीं चल सकता
             except Exception as ex:
                 LOGGER(__name__).error(f"Unexpected login error: {type(ex).__name__} - {ex}")
                 exit(1)
@@ -48,34 +48,43 @@ class Ashish(Client):
         self.username = self.me.username
         self.mention = self.me.mention
 
-        # ---------- NORMALIZE LOGGER_ID ----------
+        # ---------- NORMALIZE AND RESOLVE LOGGER_ID ----------
+        self.logger_id = None  # default: disabled
         logger_id_raw = getattr(config, "LOGGER_ID", None)
+
         if logger_id_raw is None:
-            LOGGER(__name__).warning("⚠️ LOGGER_ID is not set in config. Logging to Telegram will be disabled.")
-            self.logger_id = None
+            LOGGER(__name__).warning("⚠️ LOGGER_ID not set. Telegram logging disabled.")
         else:
-            # Convert to int if string
             try:
                 logger_id_raw = int(logger_id_raw)
             except (ValueError, TypeError):
-                LOGGER(__name__).error(f"❌ LOGGER_ID must be an integer, got {logger_id_raw}")
-                self.logger_id = None
+                LOGGER(__name__).error(f"❌ LOGGER_ID must be integer, got {logger_id_raw}")
             else:
-                # Try to resolve the correct chat ID
-                resolved_id = await self._resolve_chat_id(logger_id_raw)
-                if resolved_id is None:
+                resolved = await self._resolve_chat_id(logger_id_raw)
+                if resolved is None:
                     LOGGER(__name__).warning(
-                        f"⚠️ Could not resolve LOGGER_ID: {logger_id_raw}. "
-                        "Logging to Telegram will be disabled."
+                        f"⚠️ Could not resolve LOGGER_ID: {logger_id_raw}. Telegram logging disabled."
                     )
-                    self.logger_id = None
                 else:
-                    self.logger_id = resolved_id
+                    self.logger_id = resolved
                     LOGGER(__name__).info(f"✅ Log channel resolved to: {self.logger_id}")
 
         # ---------- SEND STARTUP MESSAGE (IF LOGGER_ID VALID) ----------
         if self.logger_id is not None:
-            while True:
+            try:
+                await self.send_message(
+                    chat_id=self.logger_id,
+                    text=(
+                        f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b></u>\n\n"
+                        f"ɪᴅ : <code>{self.id}</code>\n"
+                        f"ɴᴀᴍᴇ : {self.name}\n"
+                        f"ᴜsᴇʀɴᴀᴍᴇ : @{self.username}"
+                    ),
+                )
+                LOGGER(__name__).info("✅ Startup message sent successfully.")
+            except errors.FloodWait as e:
+                LOGGER(__name__).warning(f"⚠️ FloodWait: waiting {e.value}s then retrying...")
+                await asyncio.sleep(e.value)
                 try:
                     await self.send_message(
                         chat_id=self.logger_id,
@@ -86,27 +95,22 @@ class Ashish(Client):
                             f"ᴜsᴇʀɴᴀᴍᴇ : @{self.username}"
                         ),
                     )
-                    LOGGER(__name__).info("✅ Startup message sent successfully.")
-                    break
-                except errors.FloodWait as e:
-                    wait_time = e.value
-                    LOGGER(__name__).warning(
-                        f"⚠️ FloodWait while sending startup message. Waiting {wait_time}s..."
-                    )
-                    await asyncio.sleep(wait_time)
-                except (errors.ChannelInvalid, errors.PeerIdInvalid) as ex:
-                    LOGGER(__name__).error(
-                        "❌ Bot cannot access the log group/channel. "
-                        "Logging to Telegram will be disabled."
-                    )
-                    self.logger_id = None  # Disable logging for this session
-                    break
+                    LOGGER(__name__).info("✅ Startup message sent after floodwait.")
                 except Exception as ex:
-                    LOGGER(__name__).error(
-                        f"❌ Failed to send startup message: {type(ex).__name__} - {ex}"
-                    )
-                    self.logger_id = None
-                    break
+                    LOGGER(__name__).error(f"❌ Retry failed: {type(ex).__name__} - {ex}")
+                    self.logger_id = None  # disable logging for now
+            except (errors.ChannelInvalid, errors.PeerIdInvalid, ValueError) as ex:
+                LOGGER(__name__).error(
+                    f"❌ Cannot access log group: {type(ex).__name__} - {ex}. "
+                    "Telegram logging disabled."
+                )
+                self.logger_id = None
+            except Exception as ex:
+                LOGGER(__name__).error(
+                    f"❌ Failed to send startup message: {type(ex).__name__} - {ex}. "
+                    "Telegram logging disabled."
+                )
+                self.logger_id = None
 
         # ---------- CHECK ADMIN STATUS (ONLY IF LOGGER_ID VALID) ----------
         if self.logger_id is not None:
@@ -114,14 +118,13 @@ class Ashish(Client):
                 member = await self.get_chat_member(self.logger_id, self.id)
                 if member.status != ChatMemberStatus.ADMINISTRATOR:
                     LOGGER(__name__).warning(
-                        "⚠️ Bot is not an admin in the log group/channel. "
-                        "Some features may not work correctly."
+                        "⚠️ Bot is not an admin in the log group. Some features may be limited."
                     )
                 else:
                     LOGGER(__name__).info("✅ Bot is admin in log channel.")
             except Exception as ex:
                 LOGGER(__name__).warning(
-                    f"⚠️ Failed to check admin status: {type(ex).__name__} - {ex}"
+                    f"⚠️ Could not check admin status: {type(ex).__name__} - {ex}"
                 )
 
         LOGGER(__name__).info(f"✅ Music Bot Started as {self.name}")
@@ -136,34 +139,32 @@ class Ashish(Client):
         Tries multiple variants of the chat ID to find a working one.
         Returns the working ID or None if all fail.
         """
-        # List of possible IDs to try
-        variants = [chat_id]
+        variants = set()
 
-        # If negative, try positive (for normal groups)
-        if chat_id < 0:
-            variants.append(-chat_id)
-        else:
-            variants.append(-chat_id)
+        # Add original and its negative
+        variants.add(chat_id)
+        variants.add(-chat_id)
 
-        # If it's a supergroup ID (starts with -100), try without -100
+        # If ID starts with -100, try stripping it (convert to normal group ID)
         if chat_id < 0 and str(chat_id).startswith("-100"):
-            # Remove '-100' prefix and make negative (like a normal group)
-            stripped = int(str(chat_id)[4:])  # e.g., -1002230309222 -> 2230309222
-            variants.append(-stripped)        # -> -2230309222
+            stripped = int(str(chat_id)[4:])  # remove -100 prefix
+            variants.add(-stripped)           # keep negative sign
+            variants.add(stripped)            # also try positive
 
-        # Also try adding -100 if it's positive and large
+        # If ID is positive large number, try with -100 prefix
         if chat_id > 0 and chat_id > 1000000000:
-            variants.append(-100 * 10**len(str(chat_id)) + chat_id)  # not precise, skip
+            # add -100 + original (convert to supergroup ID)
+            supergroup_id = -100 * 10**len(str(chat_id)) + chat_id
+            variants.add(supergroup_id)
 
         # Try each variant
-        for variant in set(variants):  # remove duplicates
+        for variant in variants:
             try:
                 await self.get_chat(variant)
                 return variant
             except (errors.PeerIdInvalid, errors.ChannelInvalid, ValueError):
                 continue
-            except Exception as e:
-                LOGGER(__name__).debug(f"Error checking {variant}: {type(e).__name__} - {e}")
+            except Exception:
                 continue
 
         return None
