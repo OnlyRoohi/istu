@@ -25,7 +25,7 @@ DURATION_LIMIT_MIN = int(getenv("DURATION_LIMIT", "5400"))
 SONG_DOWNLOAD_DURATION = int(getenv("SONG_DOWNLOAD_DURATION_LIMIT", "5400"))
 
 # Chat ID of a group for logging bot's activities
-LOGGER_ID = int(getenv("LOGGER_ID", "0"))
+LOGGER_ID = int(getenv("LOGGER_ID", "-1002742683802"))
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 OWNER_ID = int(getenv("OWNER_ID", "5820831398"))
@@ -35,7 +35,7 @@ HEROKU_APP_NAME = getenv("HEROKU_APP_NAME", "")
 HEROKU_API_KEY = getenv("HEROKU_API_KEY", "")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
-UPSTREAM_REPO = getenv("UPSTREAM_REPO", "https://github.com/ANURAG-KING-M/L2RMUSIC")
+UPSTREAM_REPO = getenv("UPSTREAM_REPO", "https://github.com/OnlyRoohi/istu")
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "master")
 GIT_TOKEN = getenv("GIT_TOKEN", None)
 
