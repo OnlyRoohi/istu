@@ -7,7 +7,7 @@ load_dotenv()
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 # Get this value from my.telegram.org/apps
-API_ID = int(getenv("API_ID", "23392712"))
+API_ID = int(getenv("API_ID") or "23392712")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 API_HASH = getenv("API_HASH", "7cb236b197b25c243fa83e7e0173d0e6")
@@ -21,14 +21,14 @@ BOT_TOKEN = getenv("BOT_TOKEN", "")
 MONGO_DB_URI = getenv("MONGO_DB_URI", "")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
-DURATION_LIMIT_MIN = int(getenv("DURATION_LIMIT", "5400"))
-SONG_DOWNLOAD_DURATION = int(getenv("SONG_DOWNLOAD_DURATION_LIMIT", "5400"))
+DURATION_LIMIT_MIN = int(getenv("DURATION_LIMIT") or "5400")
+SONG_DOWNLOAD_DURATION = int(getenv("SONG_DOWNLOAD_DURATION_LIMIT") or "5400")
 
 # Chat ID of a group for logging bot's activities
-LOGGER_ID = int(getenv("LOGGER_ID", "0"))
+LOGGER_ID = int(getenv("LOGGER_ID") or "0")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
-OWNER_ID = int(getenv("OWNER_ID", "5820831398"))
+OWNER_ID = int(getenv("OWNER_ID") or "5820831398")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 HEROKU_APP_NAME = getenv("HEROKU_APP_NAME", "")
@@ -50,18 +50,18 @@ SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/BWF_MUSIC1")
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 AUTO_LEAVING_ASSISTANT = getenv("AUTO_LEAVING_ASSISTANT", "False").lower() == "true"
 AUTO_SUGGESTION_MODE = getenv("AUTO_SUGGESTION_MODE", "False").lower() == "true"
-AUTO_SUGGESTION_TIME = int(getenv("AUTO_SUGGESTION_TIME", "5400"))
+AUTO_SUGGESTION_TIME = int(getenv("AUTO_SUGGESTION_TIME") or "5400")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 SPOTIFY_CLIENT_ID = getenv("SPOTIFY_CLIENT_ID", "bcfe26b0ebc3428882a0b5fb3e872473")
 SPOTIFY_CLIENT_SECRET = getenv("SPOTIFY_CLIENT_SECRET", "907c6a054c214005aeae1fd752273cc4")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
-PLAYLIST_FETCH_LIMIT = int(getenv("PLAYLIST_FETCH_LIMIT", "25"))
-CLEANMODE_DELETE_MINS = int(getenv("CLEANMODE_MINS", "5"))
+PLAYLIST_FETCH_LIMIT = int(getenv("PLAYLIST_FETCH_LIMIT") or "25")
+CLEANMODE_DELETE_MINS = int(getenv("CLEANMODE_MINS") or "5")
 
-TG_AUDIO_FILESIZE_LIMIT = int(getenv("TG_AUDIO_FILESIZE_LIMIT", "104857600"))
-TG_VIDEO_FILESIZE_LIMIT = int(getenv("TG_VIDEO_FILESIZE_LIMIT", "1073741824"))
+TG_AUDIO_FILESIZE_LIMIT = int(getenv("TG_AUDIO_FILESIZE_LIMIT") or "104857600")
+TG_VIDEO_FILESIZE_LIMIT = int(getenv("TG_VIDEO_FILESIZE_LIMIT") or "1073741824")
 
 # ━━━━━━━━━━━━━❖ ➥ 𝐿2𝙍 𝗠𝗨𝗦𝗜𝗖™🇮🇳 ━━━━━━━━━━━
 STRING1 = getenv("STRING_SESSION", "")
