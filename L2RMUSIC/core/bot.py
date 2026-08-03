@@ -15,7 +15,14 @@ class Ashish(Client):
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             bot_token=config.BOT_TOKEN,
-            in_memory=True,
+            # FIX: in_memory=True wipes the session (and peer/access_hash cache)
+            # on every restart. That forces Pyrogram to re-learn every chat's
+            # access_hash from a fresh incoming update before it can send to
+            # it — which is exactly why send_message() fails right at startup
+            # with "Peer id invalid", for EVERY group, EVERY time.
+            # Use a persistent session file instead (saved in workdir).
+            in_memory=False,
+            workdir=".",
             parse_mode=ParseMode.HTML,
             max_concurrent_transmissions=7,
         )
@@ -49,13 +56,27 @@ class Ashish(Client):
         self.username = self.me.username
         self.mention = self.me.mention
 
+        # ---------- WARM UP PEER CACHE ----------
+        # FIX: force-fetch every chat the bot is currently a member of.
+        # This populates the access_hash for each chat in the local
+        # peer database WITHOUT needing to wait for a fresh incoming
+        # message from that chat. This is what actually solves
+        # "Peer id invalid" for chats the bot hasn't gotten an update
+        # from yet in this session.
+        try:
+            LOGGER(__name__).info("🔄 Warming up peer cache via get_dialogs()...")
+            async for _ in self.get_dialogs():
+                pass
+            LOGGER(__name__).info("✅ Peer cache warmed up.")
+        except Exception as ex:
+            LOGGER(__name__).warning(f"⚠️ get_dialogs() warmup failed: {type(ex).__name__} - {ex}")
+
         # ---------- NORMALIZE LOGGER_ID ----------
         logger_id_raw = getattr(config, "LOGGER_ID", None)
         if logger_id_raw is None:
             LOGGER(__name__).error("❌ LOGGER_ID is not set in config.")
             exit(1)
 
-        # Convert to int if string
         try:
             logger_id_raw = int(logger_id_raw)
         except (ValueError, TypeError):
@@ -67,7 +88,9 @@ class Ashish(Client):
         if resolved_id is None:
             LOGGER(__name__).error(
                 f"❌ Could not resolve LOGGER_ID: {logger_id_raw}. "
-                "Make sure the bot is added to the group/channel and the ID is correct."
+                "Make sure the bot is added to the group/channel as ADMIN, "
+                "and that at least one message/service-update has occurred "
+                "in that chat since the bot joined."
             )
             exit(1)
 
@@ -96,12 +119,13 @@ class Ashish(Client):
                 await asyncio.sleep(wait_time)
             except (errors.ChannelInvalid, errors.PeerIdInvalid) as ex:
                 LOGGER(__name__).error(
-                    "❌ Bot cannot access the log group/channel. "
-                    "Ensure the bot is added and has permission to send messages."
+                    "❌ Bot cannot access the log group/channel even after "
+                    "get_dialogs() warmup. Double-check: (1) bot is still a "
+                    "member/admin of that exact chat, (2) LOGGER_ID matches "
+                    "that chat exactly (forward a msg to @RawDataBot to verify)."
                 )
                 exit(1)
             except ValueError as ex:
-                # This should not happen after resolution, but just in case
                 LOGGER(__name__).error(
                     f"❌ Invalid chat ID after resolution: {self.logger_id} - {ex}"
                 )
@@ -140,12 +164,10 @@ class Ashish(Client):
         it automatically tries the negative version (for supergroups).
         Returns the working ID or None if both fail.
         """
-        # First, try the ID as given
         try:
             await self.get_chat(chat_id)
-            return chat_id  # valid
+            return chat_id
         except ValueError:
-            # If ValueError (invalid peer), try negative variant for supergroups
             if chat_id > 0:
                 negative_id = -chat_id
                 LOGGER(__name__).info(
@@ -155,12 +177,10 @@ class Ashish(Client):
                     await self.get_chat(negative_id)
                     return negative_id
                 except Exception:
-                    pass  # fall through
-            # If we reach here, both failed
+                    pass
             LOGGER(__name__).error(f"❌ Both {chat_id} and negative variant are invalid.")
             return None
         except Exception as e:
-            # Some other error (permission, network, etc.)
             LOGGER(__name__).error(
                 f"❌ Error accessing chat {chat_id}: {type(e).__name__} - {e}"
             )
