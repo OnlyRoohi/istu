@@ -38,13 +38,27 @@ class Bot(pyrogram.Client):
         self.mention = self.me.mention
 
         try:
-            await self.send_message(self.logger, "Bot Started")
+            # Pehle check karein ki bot chat ko access kar sakta hai ya nahi
             get = await self.get_chat_member(self.logger, self.id)
+            
+            # Check karein ki bot admin hai ya nahi
+            if get.status not in [
+                pyrogram.enums.ChatMemberStatus.ADMINISTRATOR,
+                pyrogram.enums.ChatMemberStatus.OWNER,
+            ]:
+                raise SystemExit("Please promote the bot as an admin in the logger group.")
+            
+            # Sab theek hone par hi startup message bhejein
+            await self.send_message(self.logger, "Bot Started Successfully")
+            
+        pyrogram.errors.PeerIdInvalid:
+            raise SystemExit(
+                f"Bot has failed to access the log group: {self.logger}\n"
+                "Reason: Peer id invalid. Make sure the LOGGER_ID is correct and the bot is added to that group/channel."
+            )
         except Exception as ex:
             raise SystemExit(f"Bot has failed to access the log group: {self.logger}\nReason: {ex}")
 
-        if get.status != pyrogram.enums.ChatMemberStatus.ADMINISTRATOR:
-            raise SystemExit("Please promote the bot as an admin in logger group.")
         logger.info(f"Bot started as @{self.username}")
 
     async def exit(self):
