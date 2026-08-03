@@ -230,6 +230,7 @@ class Call(PyTgCalls):
             await assistant.leave_group_call(chat_id)
         except:
             pass
+
     async def skip_stream(
         self,
         chat_id: int,
