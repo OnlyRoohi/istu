@@ -3,6 +3,7 @@ from pyrogram import Client, errors
 from pyrogram.enums import ChatMemberStatus, ParseMode
 
 import config
+
 from ..logging import LOGGER
 
 
@@ -21,8 +22,8 @@ class Ashish(Client):
 
     async def start(self):
         LOGGER(__name__).info("Attempting to connect to Telegram...")
-        
-        # लॉगिन के लिए रिट्राई लूप (FloodWait हैंडलिंग)
+
+        # ---------- LOGIN WITH RETRY ON FLOODWAIT ----------
         while True:
             try:
                 await super().start()
@@ -30,66 +31,137 @@ class Ashish(Client):
             except errors.FloodWait as e:
                 wait_time = e.value
                 LOGGER(__name__).warning(
-                    f"⚠️ Telegram FloodWait during login. Waiting for {wait_time} seconds before retrying..."
+                    f"⚠️ FloodWait during login. Waiting {wait_time}s..."
                 )
                 await asyncio.sleep(wait_time)
             except (ValueError, errors.AuthKeyUnregistered, errors.BotMethodInvalid, errors.BadRequest) as ex:
                 LOGGER(__name__).error(
-                    f"❌ Fatal Login Error! Please check your BOT_TOKEN, API_ID, and API_HASH.\n  Reason: {type(ex).__name__} - {ex}"
+                    f"❌ Fatal Login Error! Check BOT_TOKEN, API_ID, API_HASH.\n  Reason: {type(ex).__name__} - {ex}"
+                )
+                exit(1)
+            except Exception as ex:
+                LOGGER(__name__).error(f"Unexpected login error: {type(ex).__name__} - {ex}")
+                exit(1)
+
+        # ---------- SET BOT IDENTITY ----------
+        self.id = self.me.id
+        self.name = self.me.first_name + (" " + self.me.last_name if self.me.last_name else "")
+        self.username = self.me.username
+        self.mention = self.me.mention
+
+        # ---------- NORMALIZE LOGGER_ID ----------
+        logger_id_raw = getattr(config, "LOGGER_ID", None)
+        if logger_id_raw is None:
+            LOGGER(__name__).error("❌ LOGGER_ID is not set in config.")
+            exit(1)
+
+        # Convert to int if string
+        try:
+            logger_id_raw = int(logger_id_raw)
+        except (ValueError, TypeError):
+            LOGGER(__name__).error(f"❌ LOGGER_ID must be an integer, got {logger_id_raw}")
+            exit(1)
+
+        # Try to resolve the correct chat ID
+        resolved_id = await self._resolve_chat_id(logger_id_raw)
+        if resolved_id is None:
+            LOGGER(__name__).error(
+                f"❌ Could not resolve LOGGER_ID: {logger_id_raw}. "
+                "Make sure the bot is added to the group/channel and the ID is correct."
+            )
+            exit(1)
+
+        self.logger_id = resolved_id
+        LOGGER(__name__).info(f"✅ Log channel resolved to: {self.logger_id}")
+
+        # ---------- SEND STARTUP MESSAGE (WITH RETRY) ----------
+        while True:
+            try:
+                await self.send_message(
+                    chat_id=self.logger_id,
+                    text=(
+                        f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b></u>\n\n"
+                        f"ɪᴅ : <code>{self.id}</code>\n"
+                        f"ɴᴀᴍᴇ : {self.name}\n"
+                        f"ᴜsᴇʀɴᴀᴍᴇ : @{self.username}"
+                    ),
+                )
+                LOGGER(__name__).info("✅ Startup message sent successfully.")
+                break
+            except errors.FloodWait as e:
+                wait_time = e.value
+                LOGGER(__name__).warning(
+                    f"⚠️ FloodWait while sending startup message. Waiting {wait_time}s..."
+                )
+                await asyncio.sleep(wait_time)
+            except (errors.ChannelInvalid, errors.PeerIdInvalid) as ex:
+                LOGGER(__name__).error(
+                    "❌ Bot cannot access the log group/channel. "
+                    "Ensure the bot is added and has permission to send messages."
+                )
+                exit(1)
+            except ValueError as ex:
+                # This should not happen after resolution, but just in case
+                LOGGER(__name__).error(
+                    f"❌ Invalid chat ID after resolution: {self.logger_id} - {ex}"
                 )
                 exit(1)
             except Exception as ex:
                 LOGGER(__name__).error(
-                    f"Bot failed to start due to an unexpected error: {type(ex).__name__} - {ex}"
+                    f"❌ Failed to send startup message: {type(ex).__name__} - {ex}"
                 )
                 exit(1)
-        
-        # बॉट की डिटेल्स सेट करें
-        self.id = self.me.id
-        self.name = self.me.first_name + " " + (self.me.last_name or "")
-        self.username = self.me.username
-        self.mention = self.me.mention
 
-        # ---------- लॉग चैनल सेटअप (संशोधित) ----------
-        # यह मान लें कि LOGGER_ID शून्य या गलत हो सकता है
-        if not config.LOGGER_ID:
-            LOGGER(__name__).warning("LOGGER_ID is not set. Skipping log channel setup.")
-        else:
-            try:
-                # 1. स्टार्टअप मैसेज भेजने की कोशिश
-                await self.send_message(
-                    chat_id=config.LOGGER_ID,
-                    text=f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b><u>\n\nɪᴅ : <code>{self.id}</code>\nɴᴀᴍᴇ : {self.name}\nᴜsᴇʀɴᴀᴍᴇ : @{self.username}",
+        # ---------- CHECK ADMIN STATUS ----------
+        try:
+            member = await self.get_chat_member(self.logger_id, self.id)
+            if member.status != ChatMemberStatus.ADMINISTRATOR:
+                LOGGER(__name__).error(
+                    "❌ Bot is not an admin in the log group/channel. Please promote it."
                 )
-                # 2. अगर मैसेज सफलतापूर्वक भेजा, तो एडमिन चेक करें
-                try:
-                    a = await self.get_chat_member(config.LOGGER_ID, self.id)
-                    if a.status != ChatMemberStatus.ADMINISTRATOR:
-                        LOGGER(__name__).error(
-                            "Please promote your bot as an admin in your log group/channel."
-                        )
-                        exit(1)   # एडमिन न होने पर बॉट बंद करें (यदि चाहें तो हटा सकते हैं)
-                except Exception as admin_ex:
-                    LOGGER(__name__).error(
-                        f"Failed to check bot's admin status in the log group/channel.\n  Reason: {type(admin_ex).__name__} - {admin_ex}."
-                    )
-                    exit(1)   # एडमिन चेक फेल होने पर भी बंद करें (या स्किप करें)
+                exit(1)
+            LOGGER(__name__).info("✅ Bot is admin in log channel.")
+        except Exception as ex:
+            LOGGER(__name__).error(
+                f"❌ Failed to check admin status: {type(ex).__name__} - {ex}"
+            )
+            exit(1)
 
-            except (errors.ChannelInvalid, errors.PeerIdInvalid) as peer_ex:
-                # ID गलत होने पर सिर्फ वार्निंग दें, बॉट को बंद न करें
-                LOGGER(__name__).warning(
-                    f"Log channel ID ({config.LOGGER_ID}) is invalid or inaccessible. "
-                    f"Bot will continue without log channel.\n  Reason: {type(peer_ex).__name__} - {peer_ex}."
-                )
-                # एडमिन चेक न करें, आगे बढ़ें
-            except Exception as ex:
-                # कोई और अप्रत्याशित एरर – उसे भी वार्निंग मानकर आगे बढ़ें
-                LOGGER(__name__).warning(
-                    f"Failed to send startup message to log channel. Continuing without it.\n  Reason: {type(ex).__name__} - {ex}."
-                )
-
-        LOGGER(__name__).info(f"Music Bot Started as {self.name}")
+        LOGGER(__name__).info(f"✅ Music Bot Started as {self.name}")
 
     async def stop(self):
         LOGGER(__name__).info("Stopping Bot...")
         await super().stop()
+
+    # ---------- HELPER TO RESOLVE CHAT ID ----------
+    async def _resolve_chat_id(self, chat_id: int):
+        """
+        Tries to validate the chat ID. If the ID is positive and fails,
+        it automatically tries the negative version (for supergroups).
+        Returns the working ID or None if both fail.
+        """
+        # First, try the ID as given
+        try:
+            await self.get_chat(chat_id)
+            return chat_id  # valid
+        except ValueError:
+            # If ValueError (invalid peer), try negative variant for supergroups
+            if chat_id > 0:
+                negative_id = -chat_id
+                LOGGER(__name__).info(
+                    f"🔁 Positive ID {chat_id} failed. Trying negative: {negative_id}"
+                )
+                try:
+                    await self.get_chat(negative_id)
+                    return negative_id
+                except Exception:
+                    pass  # fall through
+            # If we reach here, both failed
+            LOGGER(__name__).error(f"❌ Both {chat_id} and negative variant are invalid.")
+            return None
+        except Exception as e:
+            # Some other error (permission, network, etc.)
+            LOGGER(__name__).error(
+                f"❌ Error accessing chat {chat_id}: {type(e).__name__} - {e}"
+            )
+            return None
