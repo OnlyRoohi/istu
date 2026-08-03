@@ -1,12 +1,11 @@
 import sys
-import asyncio
 from pyrogram import Client
-from pyrogram.errors import PeerIdInvalid, FloodWait
 import config
 from ..logging import LOGGER
 
 assistants = []
 assistantids = []
+
 
 class Userbot(Client):
     def __init__(self):
@@ -47,10 +46,9 @@ class Userbot(Client):
         )
 
     async def start(self):
-        LOGGER(__name__).info("Getting Assistants Info...")
+        LOGGER(__name__).info("Gettings Assistants Info...")
 
-        # 🚨 MAIN FIX: Naming strictly set to Integers (1, 2, 3). 
-        # Plugins rely on these integers to play music!
+        # 🚨 FIX 1: Names are set to Integers (1, 2, 3) so that the /play command works properly
         assistants_config = [
             (self.one, config.STRING1, 1),
             (self.two, config.STRING2, 2),
@@ -66,25 +64,23 @@ class Userbot(Client):
             try:
                 await client.start()
 
-                # Force join channels
                 try:
                     await client.join_chat("BWF_MUSIC1")
                     await client.join_chat("MUSICBOT_OWNER")
                 except Exception:
-                    pass 
+                    pass
 
                 get_me = await client.get_me()
                 client.username = get_me.username
                 client.id = get_me.id
                 client.name = get_me.first_name + (" " + get_me.last_name if get_me.last_name else "")
 
-                # Storing properly for music plugins
                 assistants.append(name)
                 assistantids.append(get_me.id)
 
                 LOGGER(__name__).info(f"Assistant {name} Started as {client.name}")
 
-                if config.LOGGER_ID: 
+                if config.LOGGER_ID:
                     try:
                         await client.send_message(
                             config.LOGGER_ID,
@@ -93,16 +89,12 @@ class Userbot(Client):
                             f"❄ ɴᴀᴍᴇ : {client.name}\n"
                             f"💫 ᴜsᴇʀɴᴀᴍᴇ : @{client.username}"
                         )
-                    except PeerIdInvalid:
-                        # Crash bypass lag gaya hai!
-                        LOGGER(__name__).warning(
-                            f"Assistant {name} log message skipped due to Cache (Peer id invalid). Bypass activated - Bot will not crash!"
-                        )
-                    except FloodWait as e:
-                        LOGGER(__name__).warning(f"FloodWait! Assistant {name} sleeping for {e.value} seconds.")
-                        await asyncio.sleep(e.value)
                     except Exception as e:
-                        LOGGER(__name__).warning(f"Assistant {name} log message skipped. Reason: {e}")
+                        # 🚨 FIX 2: Removed 'sys.exit()'. Now if Telegram throws PeerIdInvalid, the bot will bypass it and start anyway!
+                        LOGGER(__name__).error(
+                            f"Assistant Account {name} failed to access log Group. Error: {e}. Bypassing crash..."
+                        )
+                        pass 
                 else:
                     LOGGER(__name__).info(f"LOGGER_ID not set, skipping log message for Assistant {name}")
 
@@ -114,4 +106,3 @@ class Userbot(Client):
             sys.exit(1)
         else:
             LOGGER(__name__).info(f"Total {len(assistants)} assistants started successfully.")
-            
