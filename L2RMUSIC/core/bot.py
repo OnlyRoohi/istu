@@ -22,7 +22,7 @@ class Ashish(Client):
     async def start(self):
         LOGGER(__name__).info("Attempting to connect to Telegram...")
 
-        # ---------- LOGIN WITH RETRY ON FLOODWAIT ----------
+        # ---------- LOGIN (यहाँ exit केवल लॉगिन फेल पर) ----------
         while True:
             try:
                 await super().start()
@@ -37,19 +37,19 @@ class Ashish(Client):
                 LOGGER(__name__).error(
                     f"❌ Fatal Login Error! Check BOT_TOKEN, API_ID, API_HASH.\n  Reason: {type(ex).__name__} - {ex}"
                 )
-                exit(1)  # यहाँ exit ज़रूरी है – बिना लॉगिन बॉट नहीं चल सकता
+                exit(1)  # ✅ बिना लॉगिन बॉट नहीं चल सकता – यह एकमात्र exit है
             except Exception as ex:
                 LOGGER(__name__).error(f"Unexpected login error: {type(ex).__name__} - {ex}")
                 exit(1)
 
-        # ---------- SET BOT IDENTITY ----------
+        # ---------- बॉट की पहचान ----------
         self.id = self.me.id
         self.name = self.me.first_name + (" " + self.me.last_name if self.me.last_name else "")
         self.username = self.me.username
         self.mention = self.me.mention
 
-        # ---------- NORMALIZE AND VALIDATE LOGGER_ID ----------
-        self.logger_id = None  # default: disabled
+        # ---------- LOGGER_ID को वैलिडेट करें (बिना क्रैश के) ----------
+        self.logger_id = None  # डिफ़ॉल्ट: बंद
         logger_id_raw = getattr(config, "LOGGER_ID", None)
 
         if logger_id_raw is None:
@@ -62,7 +62,7 @@ class Ashish(Client):
                 logger_id = None
 
             if logger_id is not None:
-                # बस एक बार get_chat करके चेक करें – अगर वह चल गया तो ID सही है
+                # केवल एक बार get_chat करके देखें – अगर चल गया तो ID सही है
                 try:
                     await self.get_chat(logger_id)
                     self.logger_id = logger_id
@@ -78,7 +78,7 @@ class Ashish(Client):
                         "Telegram logging disabled."
                     )
 
-        # ---------- SEND STARTUP MESSAGE (IF LOGGER_ID VALID) ----------
+        # ---------- स्टार्टअप मैसेज भेजें (अगर logger_id मान्य है) ----------
         if self.logger_id is not None:
             try:
                 await self.send_message(
@@ -107,7 +107,7 @@ class Ashish(Client):
                     LOGGER(__name__).info("✅ Startup message sent after floodwait.")
                 except Exception as ex:
                     LOGGER(__name__).error(f"❌ Retry failed: {type(ex).__name__} - {ex}")
-                    self.logger_id = None
+                    self.logger_id = None  # लॉगिंग बंद करें
             except (errors.ChannelInvalid, errors.PeerIdInvalid, ValueError) as ex:
                 LOGGER(__name__).error(
                     f"❌ Cannot access log group: {type(ex).__name__} - {ex}. Disabling logging."
@@ -119,7 +119,7 @@ class Ashish(Client):
                 )
                 self.logger_id = None
 
-        # ---------- CHECK ADMIN STATUS (ONLY IF LOGGER_ID VALID) ----------
+        # ---------- एडमिन स्टेटस चेक (अगर logger_id मान्य है) ----------
         if self.logger_id is not None:
             try:
                 member = await self.get_chat_member(self.logger_id, self.id)
