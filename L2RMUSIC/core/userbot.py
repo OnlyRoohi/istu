@@ -1,11 +1,12 @@
 import sys
+import asyncio
 from pyrogram import Client
+from pyrogram.errors import PeerIdInvalid, FloodWait
 import config
 from ..logging import LOGGER
 
 assistants = []
 assistantids = []
-
 
 class Userbot(Client):
     def __init__(self):
@@ -46,71 +47,71 @@ class Userbot(Client):
         )
 
     async def start(self):
-        LOGGER(__name__).info("Gettings Assistants Info...")
+        LOGGER(__name__).info("Getting Assistants Info...")
 
-        # सभी असिस्टेंट्स को एक लिस्ट में डालें
+        # 🚨 MAIN FIX: Naming strictly set to Integers (1, 2, 3). 
+        # Plugins rely on these integers to play music!
         assistants_config = [
-            (self.one, config.STRING1, "One"),
-            (self.two, config.STRING2, "Two"),
-            (self.three, config.STRING3, "Three"),
-            (self.four, config.STRING4, "Four"),
-            (self.five, config.STRING5, "Five"),
+            (self.one, config.STRING1, 1),
+            (self.two, config.STRING2, 2),
+            (self.three, config.STRING3, 3),
+            (self.four, config.STRING4, 4),
+            (self.five, config.STRING5, 5),
         ]
 
         for client, session_string, name in assistants_config:
-            # अगर सेशन स्ट्रिंग खाली है, तो इस असिस्टेंट को स्किप करें
             if not session_string:
                 continue
 
             try:
-                # 1. असिस्टेंट स्टार्ट करें
                 await client.start()
 
-                # 2. चैनल ज्वाइन करने की कोशिश करें (अगर फेल हो तो कोई बात नहीं)
+                # Force join channels
                 try:
                     await client.join_chat("BWF_MUSIC1")
                     await client.join_chat("MUSICBOT_OWNER")
                 except Exception:
-                    pass  # ज्वाइन न हो तो आगे बढ़ें
+                    pass 
 
-                # 3. असिस्टेंट की डिटेल्स लें
                 get_me = await client.get_me()
                 client.username = get_me.username
                 client.id = get_me.id
                 client.name = get_me.first_name + (" " + get_me.last_name if get_me.last_name else "")
 
-                # 4. ग्लोबल लिस्ट में सेव करें
+                # Storing properly for music plugins
                 assistants.append(name)
                 assistantids.append(get_me.id)
 
                 LOGGER(__name__).info(f"Assistant {name} Started as {client.name}")
 
-                # 5. लॉग ग्रुप में स्टार्टअप मैसेज भेजें (अब बिना किसी डर के)
-                if config.LOGGER_ID:  # अगर LOGGER_ID सेट है
+                if config.LOGGER_ID: 
                     try:
                         await client.send_message(
                             config.LOGGER_ID,
-                            f"**» ᴀssɪsᴛᴀɴᴛ {name.lower()} sᴛᴀʀᴛᴇᴅ :**\n\n"
+                            f"**» ᴀssɪsᴛᴀɴᴛ {name} sᴛᴀʀᴛᴇᴅ :**\n\n"
                             f"✨ ɪᴅ : `{client.id}`\n"
                             f"❄ ɴᴀᴍᴇ : {client.name}\n"
                             f"💫 ᴜsᴇʀɴᴀᴍᴇ : @{client.username}"
                         )
-                    except Exception as e:
-                        # 🚨 यहाँ sys.exit() नहीं होगा, सिर्फ वार्निंग लॉग होगी!
+                    except PeerIdInvalid:
+                        # Crash bypass lag gaya hai!
                         LOGGER(__name__).warning(
-                            f"Assistant {name} could not send startup message to log channel. "
-                            f"Reason: {type(e).__name__} - {e}"
+                            f"Assistant {name} log message skipped due to Cache (Peer id invalid). Bypass activated - Bot will not crash!"
                         )
+                    except FloodWait as e:
+                        LOGGER(__name__).warning(f"FloodWait! Assistant {name} sleeping for {e.value} seconds.")
+                        await asyncio.sleep(e.value)
+                    except Exception as e:
+                        LOGGER(__name__).warning(f"Assistant {name} log message skipped. Reason: {e}")
                 else:
                     LOGGER(__name__).info(f"LOGGER_ID not set, skipping log message for Assistant {name}")
 
             except Exception as e:
-                # अगर असिस्टेंट स्टार्ट ही नहीं हो पाया (जैसे गलत सेशन)
                 LOGGER(__name__).error(f"Assistant {name} failed to start. Reason: {e}")
 
-        # 6. चेक करें कि कम से कम एक असिस्टेंट तो चालू हुआ है
         if not assistants:
             LOGGER(__name__).critical("No assistant accounts started. Bot cannot function without assistant.")
-            sys.exit(1)  # यहाँ exit होना सही है, क्योंकि बिना असिस्टेंट के बॉट काम नहीं करेगा
+            sys.exit(1)
         else:
             LOGGER(__name__).info(f"Total {len(assistants)} assistants started successfully.")
+            
