@@ -1,3 +1,4 @@
+
 import asyncio
 from pyrogram import Client, errors
 from pyrogram.enums import ChatMemberStatus, ParseMode
@@ -15,12 +16,6 @@ class Ashish(Client):
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             bot_token=config.BOT_TOKEN,
-            # FIX: in_memory=True wipes the session (and peer/access_hash cache)
-            # on every restart. That forces Pyrogram to re-learn every chat's
-            # access_hash from a fresh incoming update before it can send to
-            # it — which is exactly why send_message() fails right at startup
-            # with "Peer id invalid", for EVERY group, EVERY time.
-            # Use a persistent session file instead (saved in workdir).
             in_memory=False,
             workdir=".",
             parse_mode=ParseMode.HTML,
@@ -57,12 +52,6 @@ class Ashish(Client):
         self.mention = self.me.mention
 
         # ---------- WARM UP PEER CACHE ----------
-        # FIX: force-fetch every chat the bot is currently a member of.
-        # This populates the access_hash for each chat in the local
-        # peer database WITHOUT needing to wait for a fresh incoming
-        # message from that chat. This is what actually solves
-        # "Peer id invalid" for chats the bot hasn't gotten an update
-        # from yet in this session.
         try:
             LOGGER(__name__).info("🔄 Warming up peer cache via get_dialogs()...")
             async for _ in self.get_dialogs():
@@ -71,85 +60,61 @@ class Ashish(Client):
         except Exception as ex:
             LOGGER(__name__).warning(f"⚠️ get_dialogs() warmup failed: {type(ex).__name__} - {ex}")
 
-        # ---------- NORMALIZE LOGGER_ID ----------
+        # ---------- NORMALIZE LOGGER_ID SAFELY ----------
         logger_id_raw = getattr(config, "LOGGER_ID", None)
-        if logger_id_raw is None:
-            LOGGER(__name__).error("❌ LOGGER_ID is not set in config.")
-            exit(1)
+        self.logger_id = None
 
-        try:
-            logger_id_raw = int(logger_id_raw)
-        except (ValueError, TypeError):
-            LOGGER(__name__).error(f"❌ LOGGER_ID must be an integer, got {logger_id_raw}")
-            exit(1)
-
-        # Try to resolve the correct chat ID
-        resolved_id = await self._resolve_chat_id(logger_id_raw)
-        if resolved_id is None:
-            LOGGER(__name__).error(
-                f"❌ Could not resolve LOGGER_ID: {logger_id_raw}. "
-                "Make sure the bot is added to the group/channel as ADMIN, "
-                "and that at least one message/service-update has occurred "
-                "in that chat since the bot joined."
-            )
-            exit(1)
-
-        self.logger_id = resolved_id
-        LOGGER(__name__).info(f"✅ Log channel resolved to: {self.logger_id}")
-
-        # ---------- SEND STARTUP MESSAGE (WITH RETRY) ----------
-        while True:
+        if logger_id_raw is not None:
             try:
-                await self.send_message(
-                    chat_id=self.logger_id,
-                    text=(
-                        f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b></u>\n\n"
-                        f"ɪᴅ : <code>{self.id}</code>\n"
-                        f"ɴᴀᴍᴇ : {self.name}\n"
-                        f"ᴜsᴇʀɴᴀᴍᴇ : @{self.username}"
-                    ),
-                )
-                LOGGER(__name__).info("✅ Startup message sent successfully.")
-                break
-            except errors.FloodWait as e:
-                wait_time = e.value
-                LOGGER(__name__).warning(
-                    f"⚠️ FloodWait while sending startup message. Waiting {wait_time}s..."
-                )
-                await asyncio.sleep(wait_time)
-            except (errors.ChannelInvalid, errors.PeerIdInvalid) as ex:
-                LOGGER(__name__).error(
-                    "❌ Bot cannot access the log group/channel even after "
-                    "get_dialogs() warmup. Double-check: (1) bot is still a "
-                    "member/admin of that exact chat, (2) LOGGER_ID matches "
-                    "that chat exactly (forward a msg to @RawDataBot to verify)."
-                )
-                exit(1)
-            except ValueError as ex:
-                LOGGER(__name__).error(
-                    f"❌ Invalid chat ID after resolution: {self.logger_id} - {ex}"
-                )
-                exit(1)
+                logger_id_raw = int(logger_id_raw)
+                resolved_id = await self._resolve_chat_id(logger_id_raw)
+                if resolved_id is not None:
+                    self.logger_id = resolved_id
+                    LOGGER(__name__).info(f"✅ Log channel resolved to: {self.logger_id}")
+                else:
+                    LOGGER(__name__).warning(f"⚠️ Could not resolve LOGGER_ID: {logger_id_raw}. Skipping log messages.")
             except Exception as ex:
-                LOGGER(__name__).error(
-                    f"❌ Failed to send startup message: {type(ex).__name__} - {ex}"
-                )
-                exit(1)
+                LOGGER(__name__).warning(f"⚠️ Error processing LOGGER_ID: {ex}. Skipping log messages.")
+        else:
+            LOGGER(__name__).warning("⚠️ LOGGER_ID is not set in config. Skipping log messages.")
 
-        # ---------- CHECK ADMIN STATUS ----------
-        try:
-            member = await self.get_chat_member(self.logger_id, self.id)
-            if member.status != ChatMemberStatus.ADMINISTRATOR:
-                LOGGER(__name__).error(
-                    "❌ Bot is not an admin in the log group/channel. Please promote it."
-                )
-                exit(1)
-            LOGGER(__name__).info("✅ Bot is admin in log channel.")
-        except Exception as ex:
-            LOGGER(__name__).error(
-                f"❌ Failed to check admin status: {type(ex).__name__} - {ex}"
-            )
-            exit(1)
+        # ---------- SEND STARTUP MESSAGE SAFELY (WITHOUT CRASHING) ----------
+        if self.logger_id:
+            while True:
+                try:
+                    await self.send_message(
+                        chat_id=self.logger_id,
+                        text=(
+                            f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b></u>\n\n"
+                            f"ɪᴅ : <code>{self.id}</code>\n"
+                            f"ɴᴀᴍᴇ : {self.name}\n"
+                            f"ᴜsᴇʀɴᴀᴍᴇ : @{self.username}"
+                        ),
+                    )
+                    LOGGER(__name__).info("✅ Startup message sent successfully.")
+                    break
+                except errors.FloodWait as e:
+                    wait_time = e.value
+                    LOGGER(__name__).warning(
+                        f"⚠️ FloodWait while sending startup message. Waiting {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                except Exception as ex:
+                    LOGGER(__name__).warning(
+                        f"⚠️ Bot has failed to send startup message to the log group: {ex}. Continuing startup..."
+                    )
+                    break
+
+        # ---------- CHECK ADMIN STATUS SAFELY ----------
+        if self.logger_id:
+            try:
+                member = await self.get_chat_member(self.logger_id, self.id)
+                if member.status != ChatMemberStatus.ADMINISTRATOR:
+                    LOGGER(__name__).warning("⚠️ Bot is not an admin in the log group/channel.")
+                else:
+                    LOGGER(__name__).info("✅ Bot is admin in log channel.")
+            except Exception as ex:
+                LOGGER(__name__).warning(f"⚠️ Failed to check admin status in log channel: {ex}")
 
         LOGGER(__name__).info(f"✅ Music Bot Started as {self.name}")
 
@@ -159,11 +124,6 @@ class Ashish(Client):
 
     # ---------- HELPER TO RESOLVE CHAT ID ----------
     async def _resolve_chat_id(self, chat_id: int):
-        """
-        Tries to validate the chat ID. If the ID is positive and fails,
-        it automatically tries the negative version (for supergroups).
-        Returns the working ID or None if both fail.
-        """
         try:
             await self.get_chat(chat_id)
             return chat_id
@@ -178,10 +138,6 @@ class Ashish(Client):
                     return negative_id
                 except Exception:
                     pass
-            LOGGER(__name__).error(f"❌ Both {chat_id} and negative variant are invalid.")
             return None
-        except Exception as e:
-            LOGGER(__name__).error(
-                f"❌ Error accessing chat {chat_id}: {type(e).__name__} - {e}"
-            )
+        except Exception:
             return None
