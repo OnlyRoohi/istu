@@ -369,7 +369,7 @@ async def authusers_mar(client, CallbackQuery, _):
 @app.on_callback_query(filters.regex("VOMODECHANGE") & ~BANNED_USERS)
 @ActualAdminCB
 async def vote_change(client, CallbackQuery, _):
-    command = CallbackQuery.matches[0].group(1)
+    # FIXED: Removed the invalid CallbackQuery.matches[0].group(1) here
     try:
         await CallbackQuery.answer(_["set_cb_3"], show_alert=True)
     except:
@@ -389,3 +389,4 @@ async def vote_change(client, CallbackQuery, _):
         )
     except MessageNotModified:
         return
+
